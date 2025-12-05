@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, CSSProperties } from 'react';
 import { AppState, TreeState } from '../types';
 
 interface OverlayProps {
@@ -19,6 +19,8 @@ export const Overlay: React.FC<OverlayProps> = ({ appState }) => {
       appState.addPhotos(newPhotos);
     }
   };
+
+  const verticalTextStyle: CSSProperties = { writingMode: 'vertical-rl' };
 
   return (
     <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden text-[#FFD700] select-none">
@@ -61,7 +63,7 @@ export const Overlay: React.FC<OverlayProps> = ({ appState }) => {
       {/* 3. Vertical Slider - Right Center (Only if Webcam OFF) */}
       {!appState.webcamEnabled && (
         <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-auto flex flex-col items-center gap-6 py-6 w-16 bg-[#000000]/20 backdrop-blur-sm rounded-full border border-[#FFD700]/20 shadow-xl transition-opacity duration-500">
-          <span className="text-xs font-bold text-[#FFD700] uppercase tracking-widest" style={{ writingMode: 'vertical-rl' }}>
+          <span className="text-xs font-bold text-[#FFD700] uppercase tracking-widest" style={verticalTextStyle}>
             释放 (Unleash)
           </span>
           
@@ -82,7 +84,7 @@ export const Overlay: React.FC<OverlayProps> = ({ appState }) => {
                 />
           </div>
 
-          <span className="text-xs font-bold text-[#FFD700] uppercase tracking-widest" style={{ writingMode: 'vertical-rl' }}>
+          <span className="text-xs font-bold text-[#FFD700] uppercase tracking-widest" style={verticalTextStyle}>
              成型 (Formed)
           </span>
         </div>

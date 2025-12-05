@@ -1,7 +1,7 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useFrame, useThree, extend } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useTexture, Instances, Instance } from '@react-three/drei';
+import { useTexture, Center } from '@react-three/drei';
 import { SparkleMaterial } from './Shaders';
 import { AppState, Vector3 } from '../types';
 
@@ -49,7 +49,7 @@ const randomOnCone = (height: number, radius: number) => {
 
 export const LuxuryTree: React.FC<LuxuryTreeProps> = ({ appState }) => {
   const { viewport } = useThree((state) => state);
-  const materialRef = useRef<any>(null); // Initialize with null
+  const materialRef = useRef<any>(null);
 
   // --- 1. Foliage / Needles (Particles) ---
   const particlesData = useMemo(() => {
@@ -102,7 +102,7 @@ export const LuxuryTree: React.FC<LuxuryTreeProps> = ({ appState }) => {
   }, []);
   
   // --- 3. Animation Loop ---
-  useFrame((state, delta) => {
+  useFrame((state) => {
     // Update Shader Uniforms
     if (materialRef.current) {
       materialRef.current.uTime = state.clock.elapsedTime;
@@ -167,48 +167,125 @@ export const LuxuryTree: React.FC<LuxuryTreeProps> = ({ appState }) => {
 
 // --- Star Component ---
 const Star = ({ chaos }: { chaos: number }) => {
-    const meshRef = useRef<THREE.Mesh>(null);
+    const groupRef = useRef<THREE.Group>(null);
+    const coreRef = useRef<THREE.Mesh>(null);
+    const haloRef = useRef<THREE.Mesh>(null);
+
     // Target is the top of the tree (Height/2)
     const [targets] = useState(() => ({
-        targetPos: new THREE.Vector3(0, TREE_HEIGHT / 2, 0),
+        targetPos: new THREE.Vector3(0, TREE_HEIGHT / 2 + 1, 0), // Slightly higher for the big star
         chaosPos: randomInSphere(12),
     }));
     const pos = useRef(new THREE.Vector3());
 
+    // Generate 5-Pointed Star Shape
+    const { starShape, extrudeSettings } = useMemo(() => {
+        const shape = new THREE.Shape();
+        const points = 5;
+        const outerRadius = 2.2; // BIG Star
+        const innerRadius = 0.9;
+
+        for (let i = 0; i < points * 2; i++) {
+            const angle = (i * Math.PI) / points;
+            // i=0 is outer radius. We want the top point to be at 12 o'clock.
+            // standard trig: x=cos, y=sin starts at 3 o'clock.
+            // x=sin, y=cos starts at 12 o'clock (Top).
+            const r = (i % 2 === 0) ? outerRadius : innerRadius;
+            const x = Math.sin(angle) * r;
+            const y = Math.cos(angle) * r;
+
+            if (i === 0) shape.moveTo(x, y);
+            else shape.lineTo(x, y);
+        }
+        shape.closePath();
+
+        const settings = {
+            depth: 0.5,
+            bevelEnabled: true,
+            bevelThickness: 0.2,
+            bevelSize: 0.1,
+            bevelSegments: 4
+        };
+        return { starShape: shape, extrudeSettings: settings };
+    }, []);
+
     useFrame((state) => {
-        if (!meshRef.current) return;
+        if (!groupRef.current) return;
+        const time = state.clock.elapsedTime;
         
         // Lerp position
         pos.current.lerpVectors(targets.targetPos, targets.chaosPos, chaos);
-        meshRef.current.position.copy(pos.current);
+        groupRef.current.position.copy(pos.current);
 
-        // Slow rotation
-        meshRef.current.rotation.y = state.clock.elapsedTime * 0.5;
-        
-        // Gentle float/pulse
-        const scale = 1.2 + Math.sin(state.clock.elapsedTime * 2) * 0.2;
-        meshRef.current.scale.setScalar(scale);
+        // Core Star Animation (Spinning)
+        if (coreRef.current) {
+            // Spin on Y axis (vertical)
+            coreRef.current.rotation.y = time * 0.8;
+            
+            // Pulsing scale
+            const scale = 1 + Math.sin(time * 3) * 0.05;
+            coreRef.current.scale.setScalar(scale);
+        }
+
+        // Halo Animation (Breathing)
+        if (haloRef.current) {
+            const scale = 2.5 + Math.sin(time * 2) * 0.2;
+            haloRef.current.scale.setScalar(scale);
+            haloRef.current.rotation.z = -time * 0.2;
+        }
+
+        // Gentle floating of the whole star group
+        groupRef.current.rotation.z = Math.sin(time * 0.5) * 0.1;
     });
 
     return (
-        <group>
-            <mesh ref={meshRef}>
-                <octahedronGeometry args={[1.5, 0]} />
-                <meshStandardMaterial 
+        <group ref={groupRef}>
+            {/* 1. The Super Bright 5-Pointed Star */}
+            <Center>
+                <mesh ref={coreRef}>
+                    <extrudeGeometry args={[starShape, extrudeSettings]} />
+                    <meshStandardMaterial 
+                        color="#FFD700"
+                        emissive="#FFD700"
+                        emissiveIntensity={4} // Very bright for Bloom
+                        metalness={1.0}
+                        roughness={0.0}
+                        toneMapped={false}
+                    />
+                </mesh>
+            </Center>
+            
+            {/* 2. The Glow/Halo Sphere */}
+            <mesh ref={haloRef}>
+                <sphereGeometry args={[1, 32, 32]} />
+                <meshBasicMaterial 
                     color="#FFD700"
-                    emissive="#FFD700"
-                    emissiveIntensity={3}
-                    toneMapped={false}
+                    transparent
+                    opacity={0.2}
+                    blending={THREE.AdditiveBlending}
+                    depthWrite={false}
                 />
             </mesh>
-            {/* Light follows the star logic if we grouped them, but for simplicity let's keep light static relative to star frame or just at top */}
-            {/* Ideally the light should move with the star. Let's attach it to the mesh in a real scene graph, or simpler: just put it here since grouping works */}
+
+            {/* Light Source */}
             <pointLight 
-                position={[pos.current.x, pos.current.y, pos.current.z]} 
-                intensity={chaos > 0.5 ? 0.5 : 2} 
-                distance={15} 
-                color="#FFD700" 
+                intensity={chaos > 0.5 ? 0.5 : 3.0} 
+                distance={30} 
+                color="#FFD700"
+                decay={2}
             />
+            
+            {/* Additional sparkles/rays for that "Extra" look */}
+            <group rotation={[0, 0, Math.PI / 4]}>
+                 <mesh>
+                     <boxGeometry args={[0.1, 8, 0.1]} />
+                     <meshBasicMaterial color="#FFFFFF" transparent opacity={0.5} toneMapped={false} />
+                 </mesh>
+                 <mesh rotation={[0, 0, Math.PI / 2]}>
+                     <boxGeometry args={[0.1, 8, 0.1]} />
+                     <meshBasicMaterial color="#FFFFFF" transparent opacity={0.5} toneMapped={false} />
+                 </mesh>
+            </group>
         </group>
     );
 }

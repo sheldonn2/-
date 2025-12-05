@@ -10,10 +10,20 @@ export const WebcamController: React.FC<WebcamControllerProps> = ({ appState }) 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   
+  // Store latest appState in a ref to access it inside the animation loop
+  // without triggering a useEffect restart.
+  const appStateRef = useRef(appState);
+
+  // Sync ref with props on every render
+  useEffect(() => {
+    appStateRef.current = appState;
+  }, [appState]);
+  
   // To store previous frame data for motion detection
   const prevFrameData = useRef<Uint8ClampedArray | null>(null);
 
   useEffect(() => {
+    // Only run this effect when webcamEnabled status changes
     if (!appState.webcamEnabled) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       return;
@@ -30,38 +40,36 @@ export const WebcamController: React.FC<WebcamControllerProps> = ({ appState }) 
         }
       } catch (err) {
         console.error("Webcam access denied", err);
-        appState.setWebcamEnabled(false);
+        // Access state via ref to be safe, though setWebcamEnabled is stable usually
+        appStateRef.current.setWebcamEnabled(false);
       }
     };
 
     startWebcam();
 
-    return () => {
-      // Cleanup stream
-      if (videoRef.current && videoRef.current.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
-      }
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [appState.webcamEnabled]);
-
-  useEffect(() => {
-    if (!appState.webcamEnabled) return;
-
+    // Loop function
     const processFrame = () => {
+      // Access latest state
+      const currentAppState = appStateRef.current;
+      
+      if (!currentAppState.webcamEnabled) return;
+
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas) return;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx || video.readyState !== 4) {
+      
+      // If video not ready, keep trying
+      if (!video || !canvas || video.readyState !== 4) {
           rafRef.current = requestAnimationFrame(processFrame);
           return;
       }
 
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
       // Draw current video frame to canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Get pixel data
       const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = frame.data;
       const length = data.length;
@@ -98,7 +106,6 @@ export const WebcamController: React.FC<WebcamControllerProps> = ({ appState }) 
       }
 
       // Store current frame
-      // We must copy the data, otherwise it's a reference
       prevFrameData.current = new Uint8ClampedArray(data);
 
       // Normalize Motion Logic
@@ -111,32 +118,41 @@ export const WebcamController: React.FC<WebcamControllerProps> = ({ appState }) 
           const camX = -((motionCenterX / canvas.width) * 2 - 1);
           const camY = -((motionCenterY / canvas.height) * 2 - 1);
           
-          appState.setCameraControl({ x: camX, y: camY });
+          currentAppState.setCameraControl({ x: camX, y: camY });
       }
 
       // Logic: High Motion = Chaos (Unleash), Low Motion = Form
-      // Damping the chaos factor change
       const targetChaos = Math.min(motionScore / 1000, 1.0); 
       
-      // We want "Open hand" (big motion) to be chaotic, "Closed/Still" to be tree.
-      // This motion detector approximates that energy.
-      
       // Smooth lerp
-      const newChaos = appState.chaosFactor + (targetChaos - appState.chaosFactor) * 0.1;
+      const newChaos = currentAppState.chaosFactor + (targetChaos - currentAppState.chaosFactor) * 0.1;
       
-      appState.setChaosFactor(newChaos);
-      appState.setTreeState(newChaos > 0.5 ? TreeState.CHAOS : TreeState.FORMED);
+      // Only update if change is significant to avoid thrashing renders too hard
+      if (Math.abs(newChaos - currentAppState.chaosFactor) > 0.001) {
+          currentAppState.setChaosFactor(newChaos);
+          currentAppState.setTreeState(newChaos > 0.5 ? TreeState.CHAOS : TreeState.FORMED);
+      }
 
       rafRef.current = requestAnimationFrame(processFrame);
     };
 
+    // Start loop
     rafRef.current = requestAnimationFrame(processFrame);
-  }, [appState.webcamEnabled, appState.chaosFactor]);
+
+    return () => {
+      // Cleanup stream
+      if (videoRef.current && videoRef.current.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+        tracks.forEach(track => track.stop());
+      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [appState.webcamEnabled]); // ONLY re-run if toggle changes
 
   if (!appState.webcamEnabled) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 opacity-50 hover:opacity-100 transition-opacity border-2 border-[#FFD700] rounded overflow-hidden">
+    <div className="fixed bottom-4 right-4 z-50 opacity-50 hover:opacity-100 transition-opacity border-2 border-[#FFD700] rounded overflow-hidden pointer-events-none">
       <video ref={videoRef} width="160" height="120" className="hidden" muted playsInline />
       <canvas ref={canvasRef} width="160" height="120" className="scale-x-[-1]" />
     </div>
