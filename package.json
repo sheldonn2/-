@@ -1,7 +1,6 @@
 {
-  "name": "grand-luxury-interactive-christmas-tree",
-  "private": true,
-  "version": "0.0.0",
+  "name": "grand-luxury-christmas-tree",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,17 +8,20 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.1",
-    "@react-three/drei": "^10.7.7",
-    "three": "^0.181.2",
-    "@react-three/fiber": "^9.4.2",
-    "react-dom": "^19.2.1",
-    "@react-three/postprocessing": "^3.0.4"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.160.0",
+    "@react-three/fiber": "^8.15.14",
+    "@react-three/drei": "^9.96.1",
+    "@react-three/postprocessing": "^2.16.0",
+    "maath": "^0.10.7"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/three": "^0.160.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
   }
 }
