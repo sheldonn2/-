@@ -15,7 +15,7 @@ interface LuxuryTreeProps {
 const TREE_HEIGHT = 18;
 const TREE_RADIUS = 7;
 const PARTICLE_COUNT = 3000;
-const ORNAMENT_COUNT = 150;
+const ORNAMENT_COUNT = 400; // Increased for more luxury
 
 // Helper: Generate Random Point in Sphere (Chaos)
 const randomInSphere = (radius: number) => {
@@ -49,8 +49,7 @@ const randomOnCone = (height: number, radius: number) => {
 
 export const LuxuryTree: React.FC<LuxuryTreeProps> = ({ appState }) => {
   const { viewport } = useThree((state) => state);
-  const materialRef = useRef<any>(null);
-  const [hovered, setHover] = useState(false);
+  const materialRef = useRef<any>(null); // Initialize with null
 
   // --- 1. Foliage / Needles (Particles) ---
   const particlesData = useMemo(() => {
@@ -159,19 +158,65 @@ export const LuxuryTree: React.FC<LuxuryTreeProps> = ({ appState }) => {
         currentChaos={appState.chaosFactor} 
         photos={appState.userPhotos}
       />
+
+      {/* 3. The Grand Star */}
+      <Star chaos={appState.chaosFactor} />
     </group>
   );
 };
 
+// --- Star Component ---
+const Star = ({ chaos }: { chaos: number }) => {
+    const meshRef = useRef<THREE.Mesh>(null);
+    // Target is the top of the tree (Height/2)
+    const [targets] = useState(() => ({
+        targetPos: new THREE.Vector3(0, TREE_HEIGHT / 2, 0),
+        chaosPos: randomInSphere(12),
+    }));
+    const pos = useRef(new THREE.Vector3());
+
+    useFrame((state) => {
+        if (!meshRef.current) return;
+        
+        // Lerp position
+        pos.current.lerpVectors(targets.targetPos, targets.chaosPos, chaos);
+        meshRef.current.position.copy(pos.current);
+
+        // Slow rotation
+        meshRef.current.rotation.y = state.clock.elapsedTime * 0.5;
+        
+        // Gentle float/pulse
+        const scale = 1.2 + Math.sin(state.clock.elapsedTime * 2) * 0.2;
+        meshRef.current.scale.setScalar(scale);
+    });
+
+    return (
+        <group>
+            <mesh ref={meshRef}>
+                <octahedronGeometry args={[1.5, 0]} />
+                <meshStandardMaterial 
+                    color="#FFD700"
+                    emissive="#FFD700"
+                    emissiveIntensity={3}
+                    toneMapped={false}
+                />
+            </mesh>
+            {/* Light follows the star logic if we grouped them, but for simplicity let's keep light static relative to star frame or just at top */}
+            {/* Ideally the light should move with the star. Let's attach it to the mesh in a real scene graph, or simpler: just put it here since grouping works */}
+            <pointLight 
+                position={[pos.current.x, pos.current.y, pos.current.z]} 
+                intensity={chaos > 0.5 ? 0.5 : 2} 
+                distance={15} 
+                color="#FFD700" 
+            />
+        </group>
+    );
+}
+
+
 // --- Sub-component for Ornaments ---
 const OrnamentInstances = ({ data, currentChaos, photos }: { data: any[], currentChaos: number, photos: any[] }) => {
   const groupRef = useRef<THREE.Group>(null);
-  
-  // We use simple meshes here, but in a real "Instanced" setup we would use <Instances>
-  // However, since we need to lerp each position individually based on chaos,
-  // mapping standard meshes is easier for the dynamic interpolation without writing another custom shader for meshes.
-  // Given "High Performance" is usually better with InstancedMesh, but "Dynamic Lerping" is easier with individual meshes in R3F 
-  // unless we pass attributes. For 150 items, individual meshes are fine and smoother to code.
   
   return (
     <group ref={groupRef}>
@@ -195,7 +240,7 @@ const OrnamentInstances = ({ data, currentChaos, photos }: { data: any[], curren
   );
 };
 
-const Ornament = ({ item, chaos }: { item: any, chaos: number }) => {
+const Ornament: React.FC<{ item: any, chaos: number }> = ({ item, chaos }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const [pos] = useState(() => new THREE.Vector3());
   
@@ -224,7 +269,7 @@ const Ornament = ({ item, chaos }: { item: any, chaos: number }) => {
   );
 };
 
-const PhotoOrnament = ({ photo, chaos, index }: { photo: any, chaos: number, index: number }) => {
+const PhotoOrnament: React.FC<{ photo: any, chaos: number, index: number }> = ({ photo, chaos, index }) => {
     const meshRef = useRef<THREE.Mesh>(null);
     const texture = useTexture(photo.url) as THREE.Texture;
     const [targets] = useState(() => {
